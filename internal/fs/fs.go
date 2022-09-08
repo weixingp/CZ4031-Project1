@@ -50,7 +50,7 @@ func NewVirtualDisk(capacity int, blockSize int) VirtualDisk {
 // newBlock Create a new block in virtual disk
 // Return the index of the newly created Block and any error
 func newBlock(disk *VirtualDisk) (int, error) {
-	if disk.BlockHeight >= disk.Capacity {
+	if disk.BlockHeight >= disk.Capacity/disk.BlockSize {
 		return -1, errors.New("not enough disk space to allocate a new block")
 	}
 
@@ -115,7 +115,7 @@ func LoadRecords(dir string, disk *VirtualDisk) {
 		numVotes, err := strconv.ParseUint(rec[2], 10, 32)
 		if err != nil {
 			fmt.Printf("%v", rec[2])
-			panic("numVotes can't fit into int16")
+			panic("numVotes can't fit into int32")
 		}
 
 		record := Record{
@@ -126,7 +126,7 @@ func LoadRecords(dir string, disk *VirtualDisk) {
 
 		_, err = WriteRecord(disk, &record)
 		if err != nil {
-			break
+			panic("Loading interrupted, not enough disk storage! Consider increasing capacity of the virtual disk")
 		}
 	}
 	fmt.Printf("Records loaded into virtal disk, total: %v\n", len(records[1:]))

@@ -7,10 +7,10 @@ import (
 
 func main() {
 	// Create a new virtual disk storage
-	vd := fs.NewVirtualDisk(500, 200)
+	vd := fs.NewVirtualDisk(10, 200)
 
 	// Load 100 records
-	fs.LoadRecords("./data/data_100.tsv", &vd)
+	fs.LoadRecords("./data/data.tsv", &vd)
 
 	// Print 5 random records from virtual disk
 	count := 0
