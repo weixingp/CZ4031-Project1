@@ -38,7 +38,7 @@ func NewVirtualDisk(capacity int, blockSize int) VirtualDisk {
 		LuTable:     map[*byte]RecordLocation{},
 	}
 
-	_, err := newBlock(&vd)
+	_, err := vd.newBlock()
 	if err != nil {
 		panic("Sth went wrong, can't allocate memory")
 	}
@@ -49,7 +49,7 @@ func NewVirtualDisk(capacity int, blockSize int) VirtualDisk {
 
 // newBlock Create a new block in virtual disk
 // Return the index of the newly created Block and any error
-func newBlock(disk *VirtualDisk) (int, error) {
+func (disk *VirtualDisk) newBlock() (int, error) {
 	if disk.BlockHeight >= disk.Capacity/disk.BlockSize {
 		return -1, errors.New("not enough disk space to allocate a new block")
 	}
@@ -65,7 +65,21 @@ func newBlock(disk *VirtualDisk) (int, error) {
 
 // WriteRecord Write record into the virtual disk, with packing into bytes
 // Return the starting address of the record in the block, and error if any.
-func WriteRecord(disk *VirtualDisk, record *Record) (*byte, error) {
+func (disk *VirtualDisk) WriteRecord(record *Record) (*byte, error) {
+
+	// Record validations
+	if record.NumVotes == 0 {
+		panic("NumVotes can't be zero")
+	}
+
+	if len([]rune(record.Tconst)) > TconstSize {
+		panic("Tconst size is too long")
+	}
+
+	if record.AverageRating > 3.4e+38 {
+		panic("AverageRating is too big")
+	}
+
 	index := disk.BlockHeight - 1
 	block := &disk.Blocks[index]
 
@@ -73,7 +87,7 @@ func WriteRecord(disk *VirtualDisk, record *Record) (*byte, error) {
 
 	//Last block is full, create a new block
 	if int(block.NumRecord) >= blockCapacity {
-		i, err := newBlock(disk)
+		i, err := disk.newBlock()
 		if err != nil {
 			return nil, errors.New("fail to write record")
 		}
@@ -93,7 +107,7 @@ func WriteRecord(disk *VirtualDisk, record *Record) (*byte, error) {
 
 // LoadRecords Load records from tsv file into VirtualDisk
 // dir is the relative file path
-func LoadRecords(dir string, disk *VirtualDisk) {
+func (disk *VirtualDisk) LoadRecords(dir string) {
 	fmt.Println("Loading records from file....")
 	// open file
 	f, err := os.ReadFile(dir)
@@ -124,7 +138,7 @@ func LoadRecords(dir string, disk *VirtualDisk) {
 			NumVotes:      uint32(numVotes),
 		}
 
-		_, err = WriteRecord(disk, &record)
+		_, err = disk.WriteRecord(&record)
 		if err != nil {
 			panic("Loading interrupted, not enough disk storage! Consider increasing capacity of the virtual disk")
 		}
@@ -132,7 +146,7 @@ func LoadRecords(dir string, disk *VirtualDisk) {
 	fmt.Printf("Records loaded into virtal disk, total: %v\n", len(records[1:]))
 }
 
-func GetDiskStats(disk *VirtualDisk) (maxBlocks int, usedBlocks int, diskSize int, usedPercent float32) {
+func (disk *VirtualDisk) GetDiskStats() (maxBlocks int, usedBlocks int, diskSize int, usedPercent float32) {
 	maxBlocks = disk.Capacity / disk.BlockSize
 	usedBlocks = len(disk.Blocks)
 	diskSize = usedBlocks * disk.BlockSize
