@@ -22,7 +22,7 @@ type Record struct {
 	NumVotes      uint32
 }
 
-// RecordToBytes Pack record into bytes
+// RecordToBytes pack record into bytes
 func RecordToBytes(record *Record) []byte {
 	var bin []byte
 
@@ -45,7 +45,7 @@ func RecordToBytes(record *Record) []byte {
 	return bin
 }
 
-// BytesToRecord Unpack bytes into Record
+// BytesToRecord unpack bytes into Record
 func BytesToRecord(bytes []byte) Record {
 	// Unpack tconst
 	tconst := string(bytes[:TconstSize])
@@ -66,7 +66,7 @@ func BytesToRecord(bytes []byte) Record {
 	return r
 }
 
-// AddrToRecord Wrapper func for BytesToRecord
+// AddrToRecord wrapper func for BytesToRecord
 // addr is the starting addr of a record stored in a block
 func AddrToRecord(disk *VirtualDisk, addr *byte) Record {
 	loc, exist := disk.LuTable[addr]
@@ -79,4 +79,19 @@ func AddrToRecord(disk *VirtualDisk, addr *byte) Record {
 	bin := disk.Blocks[loc.BlockIndex].Content[blockOffset : blockOffset+RecordSize]
 
 	return BytesToRecord(bin)
+}
+
+// BlockToRecords wrapper func for BytesToRecord
+func BlockToRecords(block Block) ([]Record, []*byte) {
+	var records []Record
+	var pointers []*byte
+	var record Record
+
+	for i := 0; i < int(block.NumRecord); i++ {
+		record = BytesToRecord(block.Content[i*RecordSize : i*RecordSize+RecordSize])
+		records = append(records, record)
+		pointers = append(pointers, &block.Content[i*RecordSize])
+	}
+
+	return records, pointers
 }
