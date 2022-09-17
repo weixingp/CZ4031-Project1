@@ -106,6 +106,22 @@ func (tree *BPTree) Print() {
 	}
 }
 
+func (tree *BPTree) Height() int {
+	cursor := tree.Root
+	height := 0
+
+	if cursor == nil {
+		return 0
+	}
+
+	for !cursor.IsLeaf {
+		cursor = cursor.Children[0]
+		height++
+	}
+	height += 1
+	return height
+}
+
 // Extract all records with the same key
 func (record *Record) extractDuplicateKeyRecords() []*byte {
 	r := record
