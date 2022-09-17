@@ -1,253 +1,320 @@
 package bptree
 
-import (
-	"fmt"
-	"math"
-)
+import "fmt"
 
 // Node design
 // Ptr-Key-Ptr-Key-Ptr
 
 type BPTree struct {
-	RootNode     *Node
-	RootLeafNode *LeafNode
-	Order        int
-	IsRootLeaf   bool
-	Height       int
+	Root  *Node
+	Order int
+	//Height int
 }
 
 type Node struct {
-	Key    []uint32 // 4 bytes * num of Key
-	Ptr    []*Node  // 8 bytes(64bit os) * (num of Key + 1)
-	Parent *Node    // 8 bytes(64bit os)
+	//Node size given 64bit system (ignoring header):
+	// 4 bytes * (num of Key) + 8 bytes * (num of Ptr)
+	// Header such as IsLeaf, Parent are ignored.
+	IsLeaf   bool
+	Key      []uint32 //uint32 - 4 bytes
+	Children []*Node  //Children[i] points to node with key < Key[i], Ptr[i+1] for key >= Key[i]
+	DataPtr  []*byte  //DataPtr[i] points to the data node with key = Key[i]
+	Next     *Node    //For leaf node only, the next leaf node if any
+	Parent   *Node    //The parent node
 }
 
-type LeafNode struct {
-	Key    []uint32  // 4 bytes * num of Key
-	Ptr    []*byte   // 8 bytes(64bit os) * (num of Key)
-	Next   *LeafNode // 8 bytes(64bit os)
-	Parent *Node     // 8 bytes(64bit os)
-}
-
-// NewBPTree create a new BP BPTree
-// blockSize: Node size bounded by blockSize
-// return a BPTree
-func NewBPTree(blockSize int) BPTree {
-
-	// Init a BPTree, its root is always a Leaf node when the tree is empty.
-	tree := BPTree{
-		RootNode:     nil,
-		RootLeafNode: nil,
-		Order:        ((blockSize - 16) / 12) + 1, // Branching factor, solved with x => blockSize = 12x + 16 (and 1 more ptr than key)
-		IsRootLeaf:   true,
-		Height:       0,
+func New(order int) *BPTree {
+	return &BPTree{
+		Root:  nil,
+		Order: order,
 	}
-
-	return tree
 }
 
-func (tree *BPTree) newNode() *Node {
-	n := Node{
-		Key:    make([]uint32, tree.Order-1),
-		Ptr:    make([]*Node, tree.Order),
-		Parent: nil,
-	}
-
-	return &n
-}
-
-func (tree *BPTree) newLeafNode() *LeafNode {
-	n := LeafNode{
-		Key:    make([]uint32, tree.Order-1),
-		Ptr:    make([]*byte, tree.Order-1), // Last pointer to the next leaf is stored in next
-		Next:   nil,
-		Parent: nil,
-	}
-
-	return &n
-}
-
-// Insert key into the BP tree
 func (tree *BPTree) Insert(key uint32, addr *byte) {
+	var node *Node
 
-	// Empty tree
-	if tree.RootLeafNode == nil && tree.RootNode == nil {
-		n := tree.newLeafNode()
-		n.Ptr[0] = addr
-		n.Key[0] = key
-
-		// Attach the first node to tree
-		tree.Height = 1
-		tree.RootLeafNode = n
-		return
+	if tree.Root == nil {
+		node = tree.newLeafNode()
+		tree.Root = node
+	} else {
+		node = tree.locateLeaf(key)
 	}
 
-	// Find the leaf node given the key
-	leafNode := tree.Search(key)
-	tree.insertIntoLeafNode(leafNode, key, addr)
+	if node.getKeySize() < tree.Order-1 {
+		node.insertIntoLeaf(key, addr)
+	} else {
+		tree.splitAndInsertIntoLeaf(node, key, addr)
+	}
+
 }
 
-func (tree *BPTree) Search(key uint32) *LeafNode {
+func (tree *BPTree) Search(key uint32) *byte {
+	node := tree.locateLeaf(key)
 
-	// The root is leaf node
-	if tree.IsRootLeaf {
-		node := searchLeaf(tree, key)
-		return node
+	for i, item := range node.Key {
+		if item == key {
+			return node.DataPtr[i]
+		}
 	}
 
 	return nil
 }
 
-// Return the leaf node the key belongs to
-func searchLeaf(tree *BPTree, key uint32) *LeafNode {
-	node := tree.RootLeafNode
-	curr := node
+func (tree *BPTree) SearchRange(fromKey uint32, toKey uint32) {
+
+}
+
+func (tree *BPTree) Delete(key uint32) {
+
+}
+
+func (tree *BPTree) Print() {
+	fmt.Println("Tree:")
+	node := tree.Root
+	next := tree.Root.Children
+	fmt.Printf("%v\n", node.Key)
 
 	for {
-		for _, nKey := range node.Key {
-			if key >= nKey {
-				curr = node
+		if len(next) == 0 {
+			break
+		}
+
+		var tempNext []*Node
+		for _, value := range next {
+			if value == nil {
 				continue
-			} else {
-				// key < nKey, location found
-				return curr
+			}
+			fmt.Printf("%v", value.Key)
+			if !value.IsLeaf {
+				tempNext = append(tempNext, value.Children...)
 			}
 		}
-
-		// No more node, return curr
-		if node.Next == nil {
-			return curr
-		}
-
-		// Not found with curr node, going next
-		curr = node.Next
+		fmt.Println("")
+		next = tempNext
 	}
 }
 
-// Insert key into a node
-func (tree *BPTree) insertIntoLeafNode(leafNode *LeafNode, key uint32, addr *byte) {
-	keySize := leafNode.getNodeSize()
-	if keySize >= tree.Order-1 {
-		// No more space, make new node
-		newNode := tree.newLeafNode()
-		leafNode.Next = newNode
+// Get the current key size of a node
+func (node *Node) getKeySize() int {
+	count := 0
 
-		// Split the key/ptr into the new node
-		splitIndex := int(math.Ceil(float64(tree.Order / 2)))
-
-		tempKey := make([]uint32, (tree.Order-1)+1) // Temp key is 1 longer thant the key size
-		tempPtr := make([]*byte, (tree.Order-1)+1)
-		copy(tempKey, leafNode.Key)
-		copy(tempPtr, leafNode.Ptr)
-
-		for i, value := range tempKey {
-			if value == 0 {
-				tempKey[i] = key
-				tempPtr[i] = addr
-				break
-			}
-
-			if key < value {
-				// Insert key into the key slice by shifting 1 position down the index
-				copy(tempKey[i+1:], tempKey[i:len(tempKey)-1])
-				tempKey[i] = key
-
-				// Do the same for pointer
-				copy(tempPtr[i+1:], tempPtr[i:len(tempPtr)-1])
-				tempPtr[i] = addr
-				break
-			}
-		}
-
-		// Process key
-		leftKey := make([]uint32, tree.Order-1)
-		rightKey := make([]uint32, tree.Order-1)
-		copy(leftKey, tempKey[:splitIndex])
-		copy(rightKey, tempKey[splitIndex:])
-		leafNode.Key = leftKey
-		newNode.Key = rightKey
-
-		// Process ptr
-		leftPtr := make([]*byte, tree.Order-1)
-		rightPtr := make([]*byte, tree.Order-1)
-		copy(leftPtr, tempPtr[:splitIndex])
-		copy(rightPtr, tempPtr[splitIndex:])
-		leafNode.Ptr = leftPtr
-		newNode.Ptr = rightPtr
-
-		//if leafNode.Parent == nil {
-		//	// Create new level in tree
-		//	parent := tree.newNode()
-		//	tree.Height += 1
-		//	tree.RootNode = parent
-		//
-		//	parent.Key[0] = newNode.Key[0]
-		//	parent.Ptr[0] = leafNode
-		//}
-		return
+	if node == nil {
+		panic("Node is nil")
 	}
 
-	for i, value := range leafNode.Key {
-
-		// Slot is empty
+	for _, value := range node.Key {
+		// Possible issue with this implementation if there exist NumVotes = 0
 		if value == 0 {
-			leafNode.Key[i] = key
-			leafNode.Ptr[i] = addr
 			break
 		}
+		count += 1
+	}
+	return count
+}
 
-		// Slot is not empty
-		if key < value {
-			// Insert key into the key slice by shifting 1 position down the index
-			copy(leafNode.Key[i+1:], leafNode.Key[i:len(leafNode.Key)-1])
-			leafNode.Key[i] = key
+// search the tree to locate the leaf node
+// return the leaf node the key is at
+func (tree *BPTree) locateLeaf(key uint32) *Node {
+	var keySize int
 
-			// Do the same for pointer
-			copy(leafNode.Ptr[i+1:], leafNode.Ptr[i:len(leafNode.Ptr)-1])
-			leafNode.Ptr[i] = addr
+	cursor := tree.Root
+	// Empty tree
+	if cursor == nil {
+		return cursor
+	}
+
+	// Recursive search until leaf
+	for !cursor.IsLeaf {
+		keySize = cursor.getKeySize()
+
+		found := false
+		for i := 0; i < keySize; i++ {
+			if key < cursor.Key[i] {
+				cursor = cursor.Children[i]
+				found = true
+				break
+			}
+		}
+		if !found {
+			cursor = cursor.Children[keySize]
+		}
+	}
+
+	return cursor
+}
+
+// Get the split point when 1 node is split into 2
+// Lecture definition: LEFT has ceil(n/2) keys, RIGHT has floor(n/2) keys
+func getSplitIndex(order int) int {
+	n := order - 1
+	if n%2 == 0 {
+		return n / 2
+	}
+
+	return n/2 + 1 // = Ceil(n/2)
+}
+
+// Create a non-leaf node
+func (tree *BPTree) newNode() *Node {
+	return &Node{
+		IsLeaf:   false,
+		Key:      make([]uint32, tree.Order-1),
+		Children: make([]*Node, tree.Order),
+		Parent:   nil,
+	}
+}
+
+// Create a leaf node
+func (tree *BPTree) newLeafNode() *Node {
+	return &Node{
+		IsLeaf:  true,
+		Key:     make([]uint32, tree.Order-1),
+		DataPtr: make([]*byte, tree.Order),
+		Parent:  nil,
+	}
+}
+
+// helper function to insert node/addr/key into their slice at target index
+func insertAt[T *Node | *byte | uint32](arr []T, value T, target int) {
+
+	// Shift 1 position down the array
+	for i := len(arr) - 1; i >= 0; i-- {
+		if i == target {
 			break
 		}
+		arr[i] = arr[i-1]
 	}
+	arr[target] = value
 }
 
-func (node *LeafNode) splitNode() {
-	fmt.Println("Leaf")
-}
-
-func (node *Node) splitNode() {
-	fmt.Println("Node")
-}
-
-func insertIntoNode(node *Node, key uint32) {
-
-}
-
-func (node *Node) getNodeSize() int {
-	count := 0
-	if node != nil {
-		for _, value := range node.Key {
-			// Possible issue with this implementation if there exist NumVotes = 0
-			if value == 0 {
-				break
-			}
-			count += 1
+// helper function to get the insertion index
+func getInsertIndex(keyList []uint32, key uint32) int {
+	for i, item := range keyList {
+		if item == 0 {
+			// 0 == nil in key list -> empty slot found
+			return i
 		}
-		return count
+
+		if key < item {
+			return i
+		}
 	}
-	return 0
+	panic("Error: getInsertIndex()")
 }
 
-func (node *LeafNode) getNodeSize() int {
-	count := 0
-	if node != nil {
-		for _, value := range node.Key {
-			// Possible issue with this implementation if there exist NumVotes = 0
-			if value == 0 {
-				break
-			}
-			count += 1
-		}
-		return count
+// Insert into leaf, given a space in leaf
+func (node *Node) insertIntoLeaf(key uint32, addr *byte) {
+	targetIndex := getInsertIndex(node.Key, key)
+	insertAt(node.DataPtr, addr, targetIndex) // insert ptr
+	insertAt(node.Key, key, targetIndex)      // insert key
+}
+
+// Split the node and insert
+func (tree *BPTree) splitAndInsertIntoLeaf(node *Node, key uint32, addr *byte) {
+
+	tempKeys := make([]uint32, tree.Order) // Temp key's size is key + 1 (Order)
+	tempPointers := make([]*byte, tree.Order+1)
+	copy(tempKeys, node.Key)
+	copy(tempPointers, node.DataPtr)
+
+	targetIndex := getInsertIndex(tempKeys, key)
+	insertAt(tempKeys, key, targetIndex)
+	insertAt(tempPointers, addr, targetIndex)
+
+	splitIndex := getSplitIndex(tree.Order)
+
+	node.Key = make([]uint32, tree.Order-1)
+	node.DataPtr = make([]*byte, tree.Order)
+	copy(node.Key, tempKeys[:splitIndex])
+	copy(node.DataPtr, tempPointers[:splitIndex])
+
+	// Create a new node on the right
+	newNode := tree.newNode() // Make a new node for the right side
+	newNode.Key = make([]uint32, tree.Order-1)
+	newNode.DataPtr = make([]*byte, tree.Order)
+	copy(newNode.Key, tempKeys[splitIndex:])
+	copy(newNode.DataPtr, tempPointers[splitIndex:])
+	newNode.Parent = node.Parent // new node shares the same parent as the left node
+	newNode.IsLeaf = true
+	node.Next = newNode
+
+	tree.insertIntoParent(node, newNode, newNode.Key[0])
+
+}
+
+// Insert into internal node, given a space in the node
+func (node *Node) insertIntoNode(key uint32, rightNode *Node) {
+	targetIndex := getInsertIndex(node.Key, key)
+	if key == 19 {
+		fmt.Printf("%v\n", targetIndex)
 	}
-	return 0
+	insertAt(node.Children, rightNode, targetIndex+1) // insert ptr
+	insertAt(node.Key, key, targetIndex)              // insert key
+}
+
+func (tree *BPTree) splitAndInsertIntoNode(node *Node, insertedNode *Node, key uint32) {
+	tempKeys := make([]uint32, tree.Order)
+	tempPointers := make([]*Node, tree.Order+1)
+
+	copy(tempKeys, node.Key)
+	copy(tempPointers, node.Children)
+
+	insertIndex := getInsertIndex(tempKeys, key)
+	insertAt(tempKeys, key, insertIndex)
+	insertAt(tempPointers, insertedNode, insertIndex+1)
+
+	splitIndex := getSplitIndex(tree.Order)
+
+	// Left node
+	node.Key = make([]uint32, tree.Order-1)
+	node.Children = make([]*Node, tree.Order)
+	copy(node.Key, tempKeys[:splitIndex])
+	copy(node.Children, tempPointers[:splitIndex+1])
+
+	// Right node
+	newNode := tree.newNode() // Make a new node for the right side
+	newNode.Key = make([]uint32, tree.Order-1)
+	newNode.Children = make([]*Node, tree.Order)
+	copy(newNode.Key, tempKeys[splitIndex+1:])
+	copy(newNode.Children, tempPointers[splitIndex+1:])
+	newNode.Parent = node.Parent // new node shares the same parent as the left node
+
+	for _, item := range newNode.Children {
+		if item != nil {
+			item.Parent = newNode
+		}
+	}
+
+	// Ascend the mid-key and ptr
+	ascendKey := tempKeys[splitIndex]
+	ascendPtr := newNode
+
+	tree.insertIntoParent(node, ascendPtr, ascendKey)
+
+}
+
+func (tree *BPTree) insertIntoParent(leftNode *Node, rightNode *Node, key uint32) {
+	var insertIndex int
+	parent := leftNode.Parent
+
+	if parent == nil {
+		// No parent, create new
+		parent = tree.newNode()
+		tree.Root = parent
+		insertAt(parent.Key, key, insertIndex)
+		insertAt(parent.Children, leftNode, 0)
+		insertAt(parent.Children, rightNode, 1)
+
+		// Update parent
+		for _, item := range parent.Children {
+			if item != nil {
+				item.Parent = parent
+			}
+		}
+	} else if parent.getKeySize() < tree.Order-1 {
+		parent.insertIntoNode(key, rightNode)
+	} else {
+		tree.splitAndInsertIntoNode(parent, rightNode, key)
+	}
+
 }
