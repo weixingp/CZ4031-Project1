@@ -16,11 +16,16 @@ type Node struct {
 	// 4 bytes * (num of Key) + 8 bytes * (num of Ptr)
 	// Header such as IsLeaf, Parent are ignored.
 	IsLeaf   bool
-	Key      []uint32 //uint32 - 4 bytes
-	Children []*Node  //Children[i] points to node with key < Key[i], Ptr[i+1] for key >= Key[i]
-	DataPtr  []*byte  //DataPtr[i] points to the data node with key = Key[i]
-	Next     *Node    //For leaf node only, the next leaf node if any
-	Parent   *Node    //The parent node
+	Key      []uint32  //uint32 - 4 bytes
+	Children []*Node   //Children[i] points to node with key < Key[i], Ptr[i+1] for key >= Key[i]
+	DataPtr  []*Record //DataPtr[i] points to the data node with key = Key[i]
+	Next     *Node     //For leaf node only, the next leaf node if any
+	Parent   *Node     //The parent node
+}
+
+type Record struct {
+	Addr *byte
+	Next *Record
 }
 
 func New(order int) *BPTree {
@@ -40,6 +45,14 @@ func (tree *BPTree) Insert(key uint32, addr *byte) {
 		node = tree.locateLeaf(key)
 	}
 
+	// Add the duplicate key linked list if key exists
+	for i, item := range node.Key {
+		if item == key {
+			node.DataPtr[i].insert(addr)
+			return
+		}
+	}
+
 	if node.getKeySize() < tree.Order-1 {
 		node.insertIntoLeaf(key, addr)
 	} else {
@@ -48,15 +61,14 @@ func (tree *BPTree) Insert(key uint32, addr *byte) {
 
 }
 
-func (tree *BPTree) Search(key uint32) *byte {
+func (tree *BPTree) Search(key uint32) []*byte {
 	node := tree.locateLeaf(key)
 
 	for i, item := range node.Key {
 		if item == key {
-			return node.DataPtr[i]
+			return node.DataPtr[i].extractDuplicateKeyRecords()
 		}
 	}
-
 	return nil
 }
 
@@ -91,6 +103,34 @@ func (tree *BPTree) Print() {
 		}
 		fmt.Println("")
 		next = tempNext
+	}
+}
+
+// Extract all records with the same key
+func (record *Record) extractDuplicateKeyRecords() []*byte {
+	r := record
+	res := []*byte{r.Addr}
+
+	// Transverse the linked list
+	for r.Next != nil {
+		r = r.Next
+		res = append(res, r.Addr)
+	}
+
+	return res
+}
+
+// Insert a record to the end of the record linked list
+func (record *Record) insert(addr *byte) {
+	r := record
+	for r.Next != nil {
+		r = r.Next
+		continue
+	}
+
+	r.Next = &Record{
+		Addr: addr,
+		Next: nil,
 	}
 }
 
@@ -169,13 +209,19 @@ func (tree *BPTree) newLeafNode() *Node {
 	return &Node{
 		IsLeaf:  true,
 		Key:     make([]uint32, tree.Order-1),
-		DataPtr: make([]*byte, tree.Order),
+		DataPtr: make([]*Record, tree.Order),
 		Parent:  nil,
 	}
 }
 
+//
+//
+// Insert related codes
+//
+//
+
 // helper function to insert node/addr/key into their slice at target index
-func insertAt[T *Node | *byte | uint32](arr []T, value T, target int) {
+func insertAt[T *Node | *Record | uint32](arr []T, value T, target int) {
 
 	// Shift 1 position down the array
 	for i := len(arr) - 1; i >= 0; i-- {
@@ -205,33 +251,33 @@ func getInsertIndex(keyList []uint32, key uint32) int {
 // Insert into leaf, given a space in leaf
 func (node *Node) insertIntoLeaf(key uint32, addr *byte) {
 	targetIndex := getInsertIndex(node.Key, key)
-	insertAt(node.DataPtr, addr, targetIndex) // insert ptr
-	insertAt(node.Key, key, targetIndex)      // insert key
+	insertAt(node.DataPtr, &Record{Addr: addr}, targetIndex) // insert ptr
+	insertAt(node.Key, key, targetIndex)                     // insert key
 }
 
 // Split the node and insert
 func (tree *BPTree) splitAndInsertIntoLeaf(node *Node, key uint32, addr *byte) {
 
 	tempKeys := make([]uint32, tree.Order) // Temp key's size is key + 1 (Order)
-	tempPointers := make([]*byte, tree.Order+1)
+	tempPointers := make([]*Record, tree.Order+1)
 	copy(tempKeys, node.Key)
 	copy(tempPointers, node.DataPtr)
 
 	targetIndex := getInsertIndex(tempKeys, key)
 	insertAt(tempKeys, key, targetIndex)
-	insertAt(tempPointers, addr, targetIndex)
+	insertAt(tempPointers, &Record{Addr: addr}, targetIndex)
 
 	splitIndex := getSplitIndex(tree.Order)
 
 	node.Key = make([]uint32, tree.Order-1)
-	node.DataPtr = make([]*byte, tree.Order)
+	node.DataPtr = make([]*Record, tree.Order)
 	copy(node.Key, tempKeys[:splitIndex])
 	copy(node.DataPtr, tempPointers[:splitIndex])
 
 	// Create a new node on the right
 	newNode := tree.newNode() // Make a new node for the right side
 	newNode.Key = make([]uint32, tree.Order-1)
-	newNode.DataPtr = make([]*byte, tree.Order)
+	newNode.DataPtr = make([]*Record, tree.Order)
 	copy(newNode.Key, tempKeys[splitIndex:])
 	copy(newNode.DataPtr, tempPointers[splitIndex:])
 	newNode.Parent = node.Parent // new node shares the same parent as the left node
@@ -318,3 +364,9 @@ func (tree *BPTree) insertIntoParent(leftNode *Node, rightNode *Node, key uint32
 	}
 
 }
+
+//
+//
+// Delete related codes
+//
+//
