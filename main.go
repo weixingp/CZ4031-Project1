@@ -35,20 +35,20 @@ func main() {
 
 	// Tree test
 	fmt.Println("\n=== BPTree test ===")
-	treeOrder := (vd.BlockSize + 4) / 12 // Branching factor, solved with x => blockSize = 12x - 4
-	tree := bptree.New(treeOrder)
+	//treeOrder := (vd.BlockSize + 4) / 12 // Branching factor, solved with x => blockSize = 12x - 4
+	tree := bptree.New(4)
 	fmt.Printf("Tree Order: %v\n", tree.Order)
 
-	fmt.Println("Constructing tree, it will take awhile...")
-	// Build index
-	for _, block := range vd.Blocks {
-		records, pointers := fs.BlockToRecords(block)
-
-		for i, record := range records {
-			tree.Insert(record.NumVotes, pointers[i])
-		}
-	}
-	fmt.Printf("Done, tree height: %d", tree.Height())
+	//fmt.Println("Constructing tree, it will take awhile...")
+	//// Build index
+	//for _, block := range vd.Blocks {
+	//	records, pointers := fs.BlockToRecords(block)
+	//
+	//	for i, record := range records {
+	//		tree.Insert(record.NumVotes, pointers[i])
+	//	}
+	//}
+	//fmt.Printf("Done, tree height: %d", tree.Height())
 
 	//addrs := tree.Search(500)
 	//if addrs != nil {
@@ -65,20 +65,21 @@ func main() {
 	//}
 
 	// Example in lecture note
+	keyList := []uint32{1, 4, 7, 10, 17, 21, 31, 25, 19, 20, 28, 42, 29}
 	//keyList := []uint32{1, 4, 7, 10, 17, 21, 31, 25, 19, 20, 28, 42}
-	//keyList := []uint32{1, 4, 7, 10, 17, 21, 31, 25, 19, 20, 28, 42}
-	//for i, val := range keyList {
-	//	record := fs.Record{
-	//		Tconst:        "tt0000013",
-	//		AverageRating: 1.5 + float32(i),
-	//		NumVotes:      val,
-	//	}
-	//	addr, _ := vd.WriteRecord(&record)
-	//	tree.Insert(record.NumVotes, addr)
-	//	//tree.PrintTree()
-	//}
+	for i, val := range keyList {
+		record := fs.Record{
+			Tconst:        "tt0000013",
+			AverageRating: 1.5 + float32(i),
+			NumVotes:      val,
+		}
+		addr, _ := vd.WriteRecord(&record)
+		tree.Insert(record.NumVotes, addr)
+		//tree.PrintTree()
+	}
 
-	//tree.Print()
+	tree.Delete(21)
+	tree.Print()
 
 	//fmt.Printf("%v\n", tree.Root.Key)
 	//fmt.Printf("%v\n", tree.Root.Children)

@@ -1,6 +1,8 @@
 package bptree
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // Node design
 // Ptr-Key-Ptr-Key-Ptr
@@ -77,7 +79,8 @@ func (tree *BPTree) SearchRange(fromKey uint32, toKey uint32) {
 }
 
 func (tree *BPTree) Delete(key uint32) {
-
+	node := tree.locateLeaf(key)
+	tree.deleteKey(node, key)
 }
 
 func (tree *BPTree) Print() {
@@ -386,3 +389,115 @@ func (tree *BPTree) insertIntoParent(leftNode *Node, rightNode *Node, key uint32
 // Delete related codes
 //
 //
+
+// helper function to remove node/addr/key into their slice at target index
+func removeAt[T *Node | *Record | uint32](arr []T, target int) {
+	// Shift item forward by 1
+	for i := target + 1; i < len(arr); i++ {
+		arr[i-1] = arr[i]
+	}
+}
+
+func (node *Node) delete(key uint32) {
+	var target int
+
+	found := false
+	for i, item := range node.Key {
+		if item == key {
+			target = i
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		panic("Key does not exist")
+	}
+
+	removeAt(node.Key, target)
+	node.Key[len(node.Key)-1] = 0
+	if node.IsLeaf {
+		removeAt(node.DataPtr, target)
+		node.DataPtr[len(node.DataPtr)-1] = nil
+
+		// Update the parent's key if the key deleted is the first
+		if target == 0 && node.getKeySize() != 0 {
+			for i, item := range node.Parent.Key {
+				if item == key {
+					node.Parent.Key[i] = node.Key[0]
+				}
+			}
+		}
+
+	} else {
+		removeAt(node.Children, target+1)
+		node.Children[len(node.Children)-1] = nil
+	}
+
+}
+
+func (tree *BPTree) deleteKey(node *Node, key uint32) {
+	var minKey int
+
+	node.delete(key)
+
+	if tree.Root == node {
+		// Tree is root
+		if node.getKeySize() >= 0 {
+			return
+		}
+
+		if node.IsLeaf {
+			// Tree is empty
+			tree.Root = nil
+		} else {
+			//move the first child up to become root
+			tree.Root = node.Children[0]
+			node.Parent = nil
+		}
+		return
+	}
+
+	if node.IsLeaf {
+		minKey = tree.Order / 2 // floor( (n+1)/2 )
+	} else {
+		minKey = (tree.Order - 1) / 2 // floor( n/2 )
+	}
+
+	keySize := node.getKeySize()
+	if keySize >= minKey {
+		// Enough keys
+		return
+	}
+
+	neighbour := node.findAvailableNeighbour(minKey)
+	//fmt.Printf("Neighbour: %v\n", neighbour)
+}
+
+// Find a neighbouring node that can borrow a node
+func (node *Node) findAvailableNeighbour(minKey int) *Node {
+	var left, right *Node
+	for i, item := range node.Parent.Children {
+		if item == node {
+			if i != 0 {
+				// node is not the first node
+				left = node.Parent.Children[i-1]
+			}
+
+			if i < len(node.Parent.Children)-1 {
+				// node is not the last node
+				right = node.Parent.Children[i+1]
+			}
+		}
+	}
+
+	if left != nil && left.getKeySize()-1 >= minKey {
+		return left
+	}
+
+	if right != nil && right.getKeySize()-1 >= minKey {
+		return right // can be nil
+	}
+
+	return nil
+}
