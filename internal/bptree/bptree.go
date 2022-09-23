@@ -109,6 +109,18 @@ func (tree *BPTree) Print() {
 	}
 }
 
+func (tree *BPTree) PrintLeaves() {
+	fmt.Println("Leaves:")
+	node := tree.locateLeaf(0)
+
+	for node != nil {
+		fmt.Printf("%v -> ", node.Key)
+		node = node.Next
+	}
+	fmt.Println("End")
+
+}
+
 func (tree *BPTree) Height() int {
 	cursor := tree.Root
 	height := 0
@@ -289,18 +301,19 @@ func (tree *BPTree) splitAndInsertIntoLeaf(node *Node, key uint32, addr *byte) {
 	splitIndex := getSplitIndex(tree.Order)
 
 	node.Key = make([]uint32, tree.Order-1)
-	node.DataPtr = make([]*Record, tree.Order)
+	node.DataPtr = make([]*Record, tree.Order-1)
 	copy(node.Key, tempKeys[:splitIndex])
 	copy(node.DataPtr, tempPointers[:splitIndex])
 
 	// Create a new node on the right
 	newNode := tree.newNode() // Make a new node for the right side
 	newNode.Key = make([]uint32, tree.Order-1)
-	newNode.DataPtr = make([]*Record, tree.Order)
+	newNode.DataPtr = make([]*Record, tree.Order-1)
 	copy(newNode.Key, tempKeys[splitIndex:])
 	copy(newNode.DataPtr, tempPointers[splitIndex:])
 	newNode.Parent = node.Parent // new node shares the same parent as the left node
 	newNode.IsLeaf = true
+	newNode.Next = node.Next
 	node.Next = newNode
 
 	tree.insertIntoParent(node, newNode, newNode.Key[0])
@@ -467,15 +480,31 @@ func (tree *BPTree) deleteKey(node *Node, key uint32) {
 	keySize := node.getKeySize()
 	if keySize >= minKey {
 		// Enough keys
+		fmt.Println("OKAY")
 		return
 	}
 
-	neighbour := node.findAvailableNeighbour(minKey)
+	availableNode, isPrev, mergeableNode := node.findAvailableNeighbour(minKey)
+
+	//if key == 42 {
+	//	fmt.Printf("%v %v %v", availableNode, isPrev, mergeableNode)
+	//}
+
+	if availableNode == nil {
+		// Can't borrow anything, merging is needed
+		tree.mergeNode(node, mergeableNode, isPrev)
+	} else {
+		// Borrow 1 from neighbour
+
+		node.borrowFromNode(availableNode, isPrev)
+	}
+
 	//fmt.Printf("Neighbour: %v\n", neighbour)
 }
 
 // Find a neighbouring node that can borrow a node
-func (node *Node) findAvailableNeighbour(minKey int) *Node {
+// Return the available node (can be nil) and left & right neighbours
+func (node *Node) findAvailableNeighbour(minKey int) (available *Node, isPrev bool, mergeable *Node) {
 	var left, right *Node
 	for i, item := range node.Parent.Children {
 		if item == node {
@@ -492,12 +521,135 @@ func (node *Node) findAvailableNeighbour(minKey int) *Node {
 	}
 
 	if left != nil && left.getKeySize()-1 >= minKey {
-		return left
+		return left, true, nil
 	}
 
 	if right != nil && right.getKeySize()-1 >= minKey {
-		return right // can be nil
+		return right, false, nil
 	}
 
-	return nil
+	// No available node to borrow, return mergeable node
+	if left != nil {
+		return nil, true, left
+	} else {
+		return nil, false, right
+	}
+}
+
+func (tree *BPTree) mergeNode(node *Node, mergeInto *Node, isPrev bool) {
+	tempKeys := make([]uint32, len(node.Key))
+
+	if node.IsLeaf {
+		tempPtrs := make([]*Record, len(node.DataPtr))
+		if isPrev {
+			copy(tempKeys[:mergeInto.getKeySize()], mergeInto.Key[:mergeInto.getKeySize()])
+			copy(tempKeys[mergeInto.getKeySize():], node.Key)
+
+			copy(tempPtrs[:mergeInto.getKeySize()], mergeInto.DataPtr[:mergeInto.getKeySize()])
+			copy(tempPtrs[mergeInto.getKeySize():], node.DataPtr)
+
+			// Fix next pointer
+			for _, item := range node.Parent.Children {
+				if item == nil {
+					break
+				}
+
+				if item.Next == mergeInto {
+					item.Next = node
+					break
+				}
+			}
+		} else {
+			copy(tempKeys[:node.getKeySize()], node.Key[:node.getKeySize()])
+			copy(tempKeys[mergeInto.getKeySize()-1:], mergeInto.Key[:mergeInto.getKeySize()])
+			copy(tempPtrs[:node.getKeySize()], node.DataPtr[:node.getKeySize()])
+			copy(tempPtrs[mergeInto.getKeySize()-1:], mergeInto.DataPtr[:mergeInto.getKeySize()])
+			node.Next = mergeInto.Next
+		}
+
+		node.Key = tempKeys
+		node.DataPtr = tempPtrs
+
+		var deleteKey uint32
+		for i, item := range mergeInto.Parent.Children {
+			if item == mergeInto {
+				if isPrev {
+					deleteKey = mergeInto.Parent.Key[i]
+					node.Parent.Children[i] = node
+				} else {
+					deleteKey = mergeInto.Parent.Key[i-1]
+					node.Parent.Children[i] = node
+				}
+			}
+		}
+
+		tree.deleteKey(mergeInto.Parent, deleteKey)
+	} else {
+		panic("Can't hit")
+	}
+
+}
+
+func (node *Node) borrowFromNode(borrowFrom *Node, isPrev bool) {
+	var insertIndex, removeIndex int
+	var parentKey, parentReplaceKey uint32
+
+	if isPrev {
+		// Move the last item of borrowFrom to first item of node
+		insertIndex = 0
+		removeIndex = borrowFrom.getKeySize() - 1
+		parentKey = node.Key[0]
+		parentReplaceKey = borrowFrom.Key[borrowFrom.getKeySize()-1]
+	} else {
+		// Move the first item of borrowFrom to the last item of node
+		insertIndex = node.getKeySize() - 1
+		removeIndex = 0
+		parentKey = borrowFrom.Key[0]
+		parentReplaceKey = borrowFrom.Key[1]
+	}
+
+	insertAt(node.Key, borrowFrom.Key[removeIndex], insertIndex)
+	removeAt(borrowFrom.Key, removeIndex)
+	borrowFrom.Key[len(borrowFrom.Key)-1] = 0 // set last index as nil
+
+	if node.IsLeaf {
+
+		insertAt(node.DataPtr, borrowFrom.DataPtr[removeIndex], insertIndex)
+		removeAt(borrowFrom.DataPtr, removeIndex)
+		borrowFrom.DataPtr[len(borrowFrom.DataPtr)-1] = nil // set last index as nil
+
+		//Fix parent's key
+		for i, item := range node.Parent.Key {
+			if item == parentKey {
+				node.Parent.Key[i] = parentReplaceKey
+				break
+			}
+		}
+	} else {
+		if isPrev {
+			insertAt(node.Children, borrowFrom.Children[removeIndex+1], insertIndex)
+		} else {
+			insertAt(node.Children, borrowFrom.Children[removeIndex+1], insertIndex+1)
+		}
+
+		removeAt(borrowFrom.Children, removeIndex+1)
+		borrowFrom.Children[len(borrowFrom.Children)-1] = nil // set last index as nil
+
+		//Fix parent's key
+		for i, item := range node.Parent.Children {
+			if item == node {
+				if isPrev {
+					temp := node.Parent.Key[i-1]
+					node.Parent.Key[i-1] = parentReplaceKey
+					node.Key[0] = temp
+				} else {
+					temp := node.Parent.Key[i]
+					node.Parent.Key[i] = parentReplaceKey
+					node.Key[node.getKeySize()-1] = temp
+				}
+				break
+			}
+		}
+	}
+
 }
