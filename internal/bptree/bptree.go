@@ -44,7 +44,7 @@ func (tree *BPTree) Insert(key uint32, addr *byte) {
 		node = tree.newLeafNode()
 		tree.Root = node
 	} else {
-		node = tree.locateLeaf(key)
+		node, _ = tree.locateLeaf(key, false)
 	}
 
 	// Add the duplicate key linked list if key exists
@@ -63,9 +63,12 @@ func (tree *BPTree) Insert(key uint32, addr *byte) {
 
 }
 
-func (tree *BPTree) Search(key uint32) []*byte {
-	node := tree.locateLeaf(key)
+func (tree *BPTree) Search(key uint32, verbose bool) []*byte {
+	node, count := tree.locateLeaf(key, verbose)
 
+	if verbose {
+		fmt.Printf("Total index node accessed: %v\n", count)
+	}
 	for i, item := range node.Key {
 		if item == key {
 			return node.DataPtr[i].extractDuplicateKeyRecords()
@@ -74,12 +77,53 @@ func (tree *BPTree) Search(key uint32) []*byte {
 	return nil
 }
 
-func (tree *BPTree) SearchRange(fromKey uint32, toKey uint32) {
+func (tree *BPTree) SearchRange(fromKey uint32, toKey uint32, verbose bool) []*byte {
+	var records []*byte
+	node, count := tree.locateLeaf(fromKey, verbose)
+
+	// Process first node
+	for i, item := range node.Key {
+		if item == 0 {
+			break
+		}
+		if item >= fromKey {
+			records = append(records, node.DataPtr[i].extractDuplicateKeyRecords()...)
+		}
+	}
+	node = node.Next
+
+	for node != nil {
+		count += 1
+
+		if verbose {
+			if count <= 5 {
+				fmt.Printf("Node content: %v\n", node.Key)
+			}
+		}
+
+		for i, item := range node.Key {
+			if item == 0 {
+				break
+			}
+			records = append(records, node.DataPtr[i].extractDuplicateKeyRecords()...)
+		}
+
+		if node.Key[node.getKeySize()-1] >= toKey {
+			// Range reached
+			break
+		}
+		node = node.Next
+
+	}
+	if verbose {
+		fmt.Printf("Total index node accessed: %v\n", count)
+	}
+	return records
 
 }
 
 func (tree *BPTree) Delete(key uint32) {
-	node := tree.locateLeaf(key)
+	node, _ := tree.locateLeaf(key, false)
 	tree.deleteKey(node, key)
 }
 
@@ -111,7 +155,7 @@ func (tree *BPTree) Print() {
 
 func (tree *BPTree) PrintLeaves() {
 	fmt.Println("Leaves:")
-	node := tree.locateLeaf(0)
+	node, _ := tree.locateLeaf(0, false)
 
 	for node != nil {
 		fmt.Printf("%v -> ", node.Key)
@@ -121,7 +165,7 @@ func (tree *BPTree) PrintLeaves() {
 
 }
 
-func (tree *BPTree) Height() int {
+func (tree *BPTree) GetHeight() int {
 	cursor := tree.Root
 	height := 0
 
@@ -135,6 +179,39 @@ func (tree *BPTree) Height() int {
 	}
 	height += 1
 	return height
+}
+
+func (tree *BPTree) GetTotalNodes() int {
+	node := tree.Root
+
+	if node == nil {
+		return 0
+	}
+
+	children := tree.Root.Children
+
+	count := 1
+	for {
+		if len(children) == 0 {
+			break
+		}
+
+		var tempChildren []*Node
+		for _, value := range children {
+			if value == nil {
+				continue
+			}
+
+			count++
+
+			if !value.IsLeaf {
+				tempChildren = append(tempChildren, value.Children...)
+			}
+		}
+		children = tempChildren
+	}
+
+	return count
 }
 
 // Extract all records with the same key
@@ -185,17 +262,29 @@ func (node *Node) getKeySize() int {
 
 // search the tree to locate the leaf node
 // return the leaf node the key is at
-func (tree *BPTree) locateLeaf(key uint32) *Node {
+func (tree *BPTree) locateLeaf(key uint32, verbose bool) (*Node, int) {
 	var keySize int
 
 	cursor := tree.Root
 	// Empty tree
 	if cursor == nil {
-		return cursor
+		return cursor, 0
+	}
+
+	if verbose {
+		fmt.Println("Node content while transversing the tree (up to first 5):")
 	}
 
 	// Recursive search until leaf
+	count := 0
 	for !cursor.IsLeaf {
+		count++
+		if verbose {
+			if count <= 5 {
+				fmt.Printf("Node content: %v\n", cursor.Key)
+			}
+		}
+
 		keySize = cursor.getKeySize()
 
 		found := false
@@ -211,7 +300,15 @@ func (tree *BPTree) locateLeaf(key uint32) *Node {
 		}
 	}
 
-	return cursor
+	count++
+
+	if verbose {
+		if count <= 5 {
+			fmt.Printf("Node content: %v\n", cursor.Key)
+		}
+	}
+
+	return cursor, count
 }
 
 // Get the split point when 1 node is split into 2
@@ -480,8 +577,9 @@ func (tree *BPTree) deleteKey(node *Node, key uint32) {
 	keySize := node.getKeySize()
 	if keySize >= minKey {
 		// Enough keys
-		fmt.Println("OKAY")
 		return
+	} else {
+		panic("gg")
 	}
 
 	availableNode, isPrev, mergeableNode := node.findAvailableNeighbour(minKey)
@@ -495,7 +593,6 @@ func (tree *BPTree) deleteKey(node *Node, key uint32) {
 		tree.mergeNode(node, mergeableNode, isPrev)
 	} else {
 		// Borrow 1 from neighbour
-
 		node.borrowFromNode(availableNode, isPrev)
 	}
 
