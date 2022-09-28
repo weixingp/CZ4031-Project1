@@ -19,7 +19,7 @@ type VirtualDisk struct {
 }
 
 type Block struct {
-	NumRecord uint16 // 1 byte
+	NumRecord uint16 // 2 byte
 	Content   []byte
 }
 
@@ -83,7 +83,7 @@ func (disk *VirtualDisk) WriteRecord(record *Record) (*byte, error) {
 	index := disk.BlockHeight - 1
 	block := &disk.Blocks[index]
 
-	blockCapacity := disk.BlockSize / RecordSize
+	blockCapacity := disk.BlockSize / (RecordSize + 2) // 2 bytes for the block header
 
 	//Last block is full, create a new block
 	if int(block.NumRecord) >= blockCapacity {
