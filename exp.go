@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/schollz/progressbar/v3"
 	"internal/bptree"
 	"internal/fs"
 )
@@ -34,7 +35,9 @@ func runExperiment(blockSize int) {
 	fmt.Println("\n=== Experiment 2 ===")
 	fmt.Println("Constructing tree, it will take awhile...")
 	// Build index
+	bar := progressbar.Default(int64(len(vd.Blocks)))
 	for _, block := range vd.Blocks {
+		bar.Add(1)
 		records, pointers := fs.BlockToRecords(block)
 
 		for i, record := range records {
