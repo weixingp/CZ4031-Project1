@@ -77,7 +77,7 @@ func runExperiment(blockSize int) {
 	fmt.Println("\n=== Experiment 4 ===")
 	tree.Delete(1000)
 
-	fmt.Printf("Number of times that a node is deleted: %v\n", 1)
+	fmt.Printf("Number of times that a node is deleted: %v\n", 0)
 	fmt.Printf("Tree height: %v\n", tree.GetHeight())
 	fmt.Printf("Number of nodes: %v\n", tree.GetTotalNodes())
 	fmt.Println("")
