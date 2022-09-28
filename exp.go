@@ -35,13 +35,13 @@ func runExperiment(blockSize int) {
 	fmt.Println("\n=== Experiment 2 ===")
 	fmt.Println("Constructing tree, it will take awhile...")
 	// Build index
-	bar := progressbar.Default(int64(len(vd.Blocks)))
+	bar := progressbar.Default(int64(len(vd.LuTable)))
 	for _, block := range vd.Blocks {
-		bar.Add(1)
 		records, pointers := fs.BlockToRecords(block)
 
 		for i, record := range records {
 			tree.Insert(record.NumVotes, pointers[i])
+			bar.Add(1)
 		}
 	}
 
@@ -77,7 +77,7 @@ func runExperiment(blockSize int) {
 	processDataBlock(&vd, records)
 
 	// Experiment 5
-	fmt.Println("\n=== Experiment 4 ===")
+	fmt.Println("\n=== Experiment 5 ===")
 	tree.Delete(1000)
 
 	fmt.Printf("Number of times that a node is deleted: %v\n", 0)
