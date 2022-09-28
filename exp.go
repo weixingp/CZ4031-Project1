@@ -7,11 +7,11 @@ import (
 )
 
 func main() {
-	// Experiment 1
-	runExperiment(200)
+	runExperiment(500)
 }
 
 func runExperiment(blockSize int) {
+	// Experiment 1
 	fmt.Println("Conducting experiment 1...")
 	vd := fs.NewVirtualDisk(100, blockSize)
 	vd.LoadRecords("./data/data.tsv")
@@ -44,6 +44,7 @@ func runExperiment(blockSize int) {
 
 	fmt.Printf("Tree height: %v\n", tree.GetHeight())
 	fmt.Printf("Number of nodes: %v\n", tree.GetTotalNodes())
+	fmt.Printf("Parameter n: %v\n", tree.Order-1)
 
 	fmt.Println("")
 	fmt.Println("Content of root node:")
