@@ -102,7 +102,7 @@ func (tree *BPTree) SearchRange(fromKey uint32, toKey uint32, verbose bool) []*b
 		}
 
 		for i, item := range node.Key {
-			if item == 0 {
+			if item == 0 || item > toKey {
 				break
 			}
 			records = append(records, node.DataPtr[i].extractDuplicateKeyRecords()...)
