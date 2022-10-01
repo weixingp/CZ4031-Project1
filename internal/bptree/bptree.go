@@ -578,8 +578,6 @@ func (tree *BPTree) deleteKey(node *Node, key uint32) {
 	if keySize >= minKey {
 		// Enough keys
 		return
-	} else {
-		panic("gg")
 	}
 
 	availableNode, isPrev, mergeableNode := node.findAvailableNeighbour(minKey)
@@ -681,10 +679,7 @@ func (tree *BPTree) mergeNode(node *Node, mergeInto *Node, isPrev bool) {
 		}
 
 		tree.deleteKey(mergeInto.Parent, deleteKey)
-	} else {
-		panic("Can't hit")
 	}
-
 }
 
 func (node *Node) borrowFromNode(borrowFrom *Node, isPrev bool) {
