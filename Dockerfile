@@ -1,13 +1,10 @@
 FROM golang:latest
 
+RUN mkdir /App
+ADD . /app
 WORKDIR /app
-
-COPY go.mod ./
-
-RUN go mod download
-
-COPY . .
-
-RUN go build -o ./main ./main.go
+RUN go build -o ./main ./exp.go
 
 CMD ["./main"]
+#docker build -t gobptree .
+#docker run gobptree
