@@ -1,7 +1,8 @@
-module CZ4031-Project1
+module github.com/weixingp/CZ4031-Project1
 
 go 1.19
 
+require github.com/sirupsen/logrus v1.7.0
 require internal/fs v1.0.0
 
 require (
