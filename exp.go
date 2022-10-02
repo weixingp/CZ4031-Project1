@@ -1,28 +1,25 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"github.com/schollz/progressbar/v3"
 	"internal/bptree"
 	"internal/fs"
+	"os"
 )
 
 func main() {
 	runExperiment(500)
+	fmt.Print("Press 'Enter' to continue...")
+	bufio.NewReader(os.Stdin).ReadBytes('\n')
 }
 
 func runExperiment(blockSize int) {
 	// Experiment 1
-	fmt.Println("Conducting experiment 1...")
+	fmt.Println("Loading data from tsv...")
 	vd := fs.NewVirtualDisk(100, blockSize)
 	vd.LoadRecords("./data/data.tsv")
-
-	maxBlocks, usedBlocks, diskSize, usedPercent := vd.GetDiskStats()
-	fmt.Println("\n=== Experiment 1 ===")
-	fmt.Printf("Max block: %d\n", maxBlocks)
-	fmt.Printf("Used block: %d\n", usedBlocks)
-	fmt.Printf("Size: %db (%.2fMB)\n", diskSize, float32(diskSize)/1_000_000)
-	fmt.Printf("Usage: %.2f%%\n", usedPercent)
 
 	// Key: uint32 - 4 bytes
 	// Pointers: (Either to data or leaf, same size) - 8 bytes/ptr
@@ -31,8 +28,6 @@ func runExperiment(blockSize int) {
 	treeOrder := (vd.BlockSize - 5) / 12 // Branching factor, solved with x => blockSize = 12x -4 + 8 + 1
 	tree := bptree.New(treeOrder)
 
-	// Experiment 2
-	fmt.Println("\n=== Experiment 2 ===")
 	fmt.Println("Constructing tree, it will take awhile...")
 	// Build index
 	bar := progressbar.Default(int64(len(vd.LuTable)))
@@ -45,6 +40,15 @@ func runExperiment(blockSize int) {
 		}
 	}
 
+	maxBlocks, usedBlocks, diskSize, usedPercent := vd.GetDiskStats()
+	fmt.Println("\n=== Experiment 1 ===")
+	fmt.Printf("Max block: %d\n", maxBlocks)
+	fmt.Printf("Used block: %d\n", usedBlocks)
+	fmt.Printf("Size: %db (%.2fMB)\n", diskSize, float32(diskSize)/1_000_000)
+	fmt.Printf("Usage: %.2f%%\n", usedPercent)
+
+	// Experiment 2
+	fmt.Println("\n=== Experiment 2 ===")
 	fmt.Printf("Tree height: %v\n", tree.GetHeight())
 	fmt.Printf("Number of nodes: %v\n", tree.GetTotalNodes())
 	fmt.Printf("Parameter n: %v\n", tree.Order-1)
