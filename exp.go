@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	runExperiment(500)
+	runExperiment(200)
 	fmt.Print("Press 'Enter' to continue...")
 	bufio.NewReader(os.Stdin).ReadBytes('\n')
 }
