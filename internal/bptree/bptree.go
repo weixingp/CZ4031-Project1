@@ -219,7 +219,7 @@ func (record *Record) extractDuplicateKeyRecords() []*byte {
 	r := record
 	res := []*byte{r.Addr}
 
-	// Transverse the linked list
+	// Traverse the linked list
 	for r.Next != nil {
 		r = r.Next
 		res = append(res, r.Addr)
@@ -272,7 +272,7 @@ func (tree *BPTree) locateLeaf(key uint32, verbose bool) (*Node, int) {
 	}
 
 	if verbose {
-		fmt.Println("Node content while transversing the tree (up to first 5):")
+		fmt.Println("Node content while traversing the tree (up to first 5):")
 	}
 
 	// Recursive search until leaf
